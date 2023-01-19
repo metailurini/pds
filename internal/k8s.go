@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"k8s.io/apimachinery/pkg/watch"
 	"path/filepath"
 	"sync"
 
@@ -86,14 +87,17 @@ func InitApp(logger *zap.Logger) (*App, error) {
 	}, nil
 }
 
-// WatchChanges is used to watch changes all pods of a given namespace,
+// createWatcher will use k8s clientSet to create watcher instance for a namespace
+func createWatcher(ctx context.Context, clientSet typeCoreV1.CoreV1Interface, namespace string, options metaV1.ListOptions) (watch.Interface, error) {
+	return clientSet.Pods(namespace).Watch(ctx, options)
+}
+
+// WatchPodChanges is used to watch changes all pods of a given namespace,
 // and execute list callback function
-func (app *App) WatchChanges(ctx context.Context, namespace string, fns ...callback) error {
-	watcher, err := app.clientSet.
-		Pods(namespace).
-		Watch(ctx, metaV1.ListOptions{})
+func (app *App) WatchPodChanges(ctx context.Context, namespace string, callbacks ...callback) error {
+	watcher, err := createWatcher(ctx, app.clientSet, namespace, metaV1.ListOptions{})
 	if err != nil {
-		return errors.Wrap(err, "Watch")
+		return errors.Wrap(err, "createWatcher")
 	}
 
 	for event := range watcher.ResultChan() {
@@ -102,7 +106,7 @@ func (app *App) WatchChanges(ctx context.Context, namespace string, fns ...callb
 			continue
 		}
 
-		for idx, fn := range fns {
+		for idx, fn := range callbacks {
 			err := fn(ctx, pod)
 			if err != nil {
 				return errors.Wrapf(err, "fn[%d]", idx)
@@ -112,26 +116,36 @@ func (app *App) WatchChanges(ctx context.Context, namespace string, fns ...callb
 	return nil
 }
 
-// WatchChangesAllNameSpaces is async function to watch all pod for all existed namespaces
+// getNameSpaces will use k8s clientSet to list all existed namespaces
+func getNameSpaces(ctx context.Context, clientSet typeCoreV1.CoreV1Interface, options metaV1.ListOptions) ([]apiCoreV1.Namespace, error) {
+	list, err := clientSet.Namespaces().List(ctx, options)
+	if err != nil {
+		return nil, errors.Wrap(err, "Namespaces.List")
+	}
+	return list.Items, nil
+}
+
+// WatchPodChangesAllNameSpaces is async function to watch all pod for all existed namespaces
 // and execute list callback function
 //
 // For the safe usage it should be controlled by Context, after context was done
 // use function Wait to wait all runner done their tasks
-func (app *App) WatchChangesAllNameSpaces(ctx context.Context, fns ...callback) {
-	listNamespaces, err := app.clientSet.Namespaces().List(ctx, metaV1.ListOptions{})
+func (app *App) WatchPodChangesAllNameSpaces(ctx context.Context, callbacks ...callback) {
+	namespaces, err := getNameSpaces(ctx, app.clientSet, metaV1.ListOptions{})
 	if err != nil {
-		panic(err)
+		app.logger.Fatal(errors.Wrap(err, "getNameSpaces").Error())
 	}
 
-	app.group.Add(len(listNamespaces.Items) * len(fns))
+	// distribute all callback functions for all namespaces
+	app.group.Add(len(namespaces) * len(callbacks))
 
-	for _, namespace := range listNamespaces.Items {
-		for _, fn := range fns {
+	for _, namespace := range namespaces {
+		for _, fn := range callbacks {
 			go func(namespace apiCoreV1.Namespace, fn callback) {
 				defer app.group.Done()
 				app.logger.Info(fmt.Sprintf("start watching %s", namespace.Name))
 
-				if err := app.WatchChanges(ctx, namespace.Name, fn); err != nil {
+				if err := app.WatchPodChanges(ctx, namespace.Name, fn); err != nil {
 					app.logger.Error(fmt.Sprintf("error while watching %s: %v", namespace.Name, err))
 				}
 

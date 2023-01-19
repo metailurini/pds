@@ -27,9 +27,9 @@ func NewParallelStdout(logFileName string) (*ParallelStdout, error) {
 }
 
 // Write will show log to the console and run the parent `Write` implementation
-func (s *ParallelStdout) Write(p []byte) (n int, err error) {
+func (ps *ParallelStdout) Write(p []byte) (n int, err error) {
 	fmt.Printf("%s", p)
-	return s.File.Write(p)
+	return ps.File.Write(p)
 }
 
 // InitLogger is used to construct the zap logger for logging info
