@@ -13,7 +13,6 @@ import (
 
 	"pds/internal"
 
-	_ "github.com/faiface/beep"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	apiCoreV1 "k8s.io/api/core/v1"
