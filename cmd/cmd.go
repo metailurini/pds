@@ -7,7 +7,7 @@ import (
 	"path"
 	"time"
 
-	"pds/internal"
+	"github.com/metailurini/pds/internal"
 
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"

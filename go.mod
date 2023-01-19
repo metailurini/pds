@@ -1,4 +1,4 @@
-module pds
+module github.com/metailurini/pds
 
 go 1.19
 

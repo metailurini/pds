@@ -7,9 +7,10 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
-	"pds/internal"
 	"syscall"
 	"time"
+
+	"github.com/metailurini/pds/internal"
 
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"

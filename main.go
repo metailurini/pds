@@ -1,7 +1,7 @@
 package main
 
 import (
-	"pds/cmd"
+	"github.com/metailurini/pds/cmd"
 )
 
 func main() {
