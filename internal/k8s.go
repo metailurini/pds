@@ -32,7 +32,7 @@ type callback func(context.Context, *apiCoreV1.Pod) error
 type App struct {
 	clientSet typeCoreV1.CoreV1Interface
 	logger    *zap.Logger
-	group     *sync.WaitGroup
+	waitGroup *sync.WaitGroup
 }
 
 // getK8sConfig is used to init k8s client config based on local environment vars
@@ -83,7 +83,7 @@ func InitApp(logger *zap.Logger) (*App, error) {
 	return &App{
 		clientSet: instance,
 		logger:    logger,
-		group:     new(sync.WaitGroup),
+		waitGroup: new(sync.WaitGroup),
 	}, nil
 }
 
@@ -130,19 +130,19 @@ func getNameSpaces(ctx context.Context, clientSet typeCoreV1.CoreV1Interface, op
 //
 // For the safe usage it should be controlled by Context, after context was done
 // use function Wait to wait all runner done their tasks
-func (app *App) WatchPodChangesAllNameSpaces(ctx context.Context, callbacks ...callback) {
+func (app *App) WatchPodChangesAllNameSpaces(ctx context.Context, callbacks ...callback) error {
 	namespaces, err := getNameSpaces(ctx, app.clientSet, metaV1.ListOptions{})
 	if err != nil {
-		app.logger.Fatal(errors.Wrap(err, "getNameSpaces").Error())
+		return errors.Wrap(err, "getNameSpaces")
 	}
 
 	// distribute all callback functions for all namespaces
-	app.group.Add(len(namespaces) * len(callbacks))
+	app.waitGroup.Add(len(namespaces) * len(callbacks))
 
 	for _, namespace := range namespaces {
 		for _, fn := range callbacks {
 			go func(namespace apiCoreV1.Namespace, fn callback) {
-				defer app.group.Done()
+				defer app.waitGroup.Done()
 				app.logger.Info(fmt.Sprintf("start watching %s", namespace.Name))
 
 				if err := app.WatchPodChanges(ctx, namespace.Name, fn); err != nil {
@@ -153,9 +153,10 @@ func (app *App) WatchPodChangesAllNameSpaces(ctx context.Context, callbacks ...c
 			}(namespace, fn)
 		}
 	}
+	return nil
 }
 
 // Wait is used for wait all runner done their tasks
 func (app *App) Wait() {
-	app.group.Wait()
+	app.waitGroup.Wait()
 }

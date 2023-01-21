@@ -57,7 +57,9 @@ var singlePodCmd = &cobra.Command{
 			logger.Fatal(errors.Wrap(err, "InitApp").Error())
 		}
 
-		app.WatchPodChangesAllNameSpaces(ctx, taskSinglePod)
+		if err := app.WatchPodChangesAllNameSpaces(ctx, taskSinglePod); err != nil {
+			logger.Fatal(errors.Wrap(err, "WatchPodChangesAllNameSpaces").Error())
+		}
 
 		<-signals
 		cancel()
