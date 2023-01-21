@@ -52,7 +52,7 @@ var singlePodCmd = &cobra.Command{
 		signals := make(chan os.Signal)
 		signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
 
-		app, err := internal.InitApp(logger)
+		app, err := internal.InitApp(kubeConfigVar, logger)
 		if err != nil {
 			logger.Fatal(errors.Wrap(err, "InitApp").Error())
 		}

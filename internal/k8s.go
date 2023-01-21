@@ -2,10 +2,8 @@ package internal
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"k8s.io/apimachinery/pkg/watch"
-	"path/filepath"
 	"sync"
 
 	"github.com/pkg/errors"
@@ -16,7 +14,6 @@ import (
 	typeCoreV1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
-	"k8s.io/client-go/util/homedir"
 )
 
 // clientSetInstanceLock is used by getClientSetInstance to init one time,
@@ -35,34 +32,13 @@ type App struct {
 	waitGroup *sync.WaitGroup
 }
 
-// getK8sConfig is used to init k8s client config based on local environment vars
-func getK8sConfig() (*rest.Config, error) {
-	var kubeConfig *string
-	if home := homedir.HomeDir(); home != "" {
-		kubeConfig = flag.String("kubeConfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeConfig file")
-	} else {
-		kubeConfig = flag.String("kubeConfig", "", "absolute path to the kubeConfig file")
-	}
-	flag.Parse()
-
-	config, err := clientcmd.BuildConfigFromFlags("", *kubeConfig)
-	if err != nil {
-		return nil, errors.Wrap(err, "BuildConfigFromFlags")
-	}
-	return config, nil
-}
-
 // getClientSetInstance is used to init one time k8s client set
-func getClientSetInstance() (typeCoreV1.CoreV1Interface, error) {
+func getClientSetInstance(config *rest.Config) (typeCoreV1.CoreV1Interface, error) {
 	if clientSetInstance == nil {
 		clientSetInstanceLock.Lock()
 		defer clientSetInstanceLock.Unlock()
-		if clientSetInstance == nil {
-			config, err := getK8sConfig()
-			if err != nil {
-				return nil, errors.Wrap(err, "getK8sConfig")
-			}
 
+		if clientSetInstance == nil {
 			clientSet, err := kubernetes.NewForConfig(config)
 			if err != nil {
 				return nil, errors.Wrap(err, "NewForConfig")
@@ -74,10 +50,17 @@ func getClientSetInstance() (typeCoreV1.CoreV1Interface, error) {
 }
 
 // InitApp is used to construct app
-func InitApp(logger *zap.Logger) (*App, error) {
-	instance, err := getClientSetInstance()
+//
+// default configStr: ~/.kube/config
+func InitApp(configStr string, logger *zap.Logger) (*App, error) {
+	config, err := clientcmd.BuildConfigFromFlags("", configStr)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "BuildConfigFromFlags")
+	}
+
+	instance, err := getClientSetInstance(config)
+	if err != nil {
+		return nil, errors.Wrap(err, "getClientSetInstance")
 	}
 
 	return &App{
